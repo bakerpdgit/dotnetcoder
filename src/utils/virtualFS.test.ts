@@ -56,32 +56,6 @@ describe('filesystems', () => {
     expect(await getEntryByPath(fs.id, '/Program.fs')).toBeNull()
   })
 
-  it('prunes an untouched starter file left behind by a now-hidden language', async () => {
-    await ensureDefaultFilesystem('csharp')
-    const other = await createFilesystem('Coursework')
-    // Recreate what an older build seeded while F# was still selectable.
-    const template = encode(LANGUAGES.fsharp.template)
-    await createEntry(DEFAULT_FS_ID, '/', 'Program.fs', 'file', template, 'text/plain')
-    await createEntry(other.id, '/', 'Program.fs', 'file', encode(LANGUAGES.fsharp.template), 'text/plain')
-
-    expect(await getEntryByPath(DEFAULT_FS_ID, '/Program.fs')).toBeNull()
-    expect(await getEntryByPath(other.id, '/Program.fs')).toBeNull()
-    // The C# starter is untouched.
-    expect(await getEntryByPath(DEFAULT_FS_ID, '/Program.cs')).not.toBeNull()
-  })
-
-  it('never prunes an F# file the user has edited', async () => {
-    await ensureDefaultFilesystem('csharp')
-    await createEntry(
-      DEFAULT_FS_ID, '/', 'Program.fs', 'file',
-      encode(LANGUAGES.fsharp.template + '\nprintfn "mine"\n'), 'text/plain',
-    )
-    await createEntry(DEFAULT_FS_ID, '/', 'Notes.fs', 'file', encode('// mine'), 'text/plain')
-
-    expect(await getEntryByPath(DEFAULT_FS_ID, '/Program.fs')).not.toBeNull()
-    expect(await getEntryByPath(DEFAULT_FS_ID, '/Notes.fs')).not.toBeNull()
-  })
-
   it('refuses to rename or delete the default filesystem', async () => {
     await ensureDefaultFilesystem('csharp')
     await expect(renameFilesystem(DEFAULT_FS_ID, 'Nope')).rejects.toThrow(/cannot rename/i)

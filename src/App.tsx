@@ -13,7 +13,6 @@ import { parseArgs } from './utils/args'
 import { SELECTABLE_LANGUAGES, getLanguage, isLanguageId } from './utils/languages'
 import {
   DEFAULT_FS_ID, createFilesystem, ensureDefaultFilesystem, ensureLanguageEntryPoint,
-  pruneHiddenLanguageStarters,
   getAllEntries, getEntryByPath, getSourceFiles, guessMimeType, importFileMapToFs,
   listFilesystems, writeFile,
 } from './utils/virtualFS'

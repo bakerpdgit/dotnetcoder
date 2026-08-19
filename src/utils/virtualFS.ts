@@ -1,5 +1,5 @@
 import type { LanguageId, VFSEntry, VFSFile, VFSFilesystem } from '../types'
-import { LANGUAGES, LANGUAGE_ORDER, compileExtensions } from './languages'
+import { LANGUAGES, compileExtensions } from './languages'
 
 const DB_NAME = 'dotnetcoder-vfs'
 const DB_VERSION = 1
