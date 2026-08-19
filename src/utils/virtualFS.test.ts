@@ -4,7 +4,7 @@ import {
   DEFAULT_FS_ID, _resetDbForTests, createEntry, createFilesystem, deleteEntry,
   deleteFilesystem, ensureDefaultFilesystem, ensureFolders, ensureLanguageEntryPoint,
   getAllEntries, getEntryByPath, getSourceFiles, guessMimeType, importFileMapToFs,
-  listChildren, listFilesystems, pruneHiddenLanguageStarters, renameEntry,
+  listChildren, listFilesystems, renameEntry,
   renameFilesystem, writeFile,
 } from './virtualFS'
 import { LANGUAGES } from './languages'
