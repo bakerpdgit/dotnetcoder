@@ -1,0 +1,65 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install the wasm-tools workload
+        run: dotnet workload install wasm-tools
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      # Compiles the same Runner.cs the browser uses against desktop .NET and
+      # exercises C#/VB compile, run, stdin, diagnostics and exit codes.
+      - name: Test the compiler core
+        run: npm run test:runtime
+
+      - name: Test the front end
+        run: npm test
+
+      - name: Build the .NET WASM runtime bundle
+        run: npm run build:runtime
+
+      - name: Build the site
+        run: npm run build
+
+      - name: Install the Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: End-to-end smoke tests
+        run: npm run test:e2e
+
+      - name: Upload dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: dotnetcoder-dist
+          # ~20MB of runtime bundle: keep the retention short.
+          retention-days: 7
+          path: dist
+
+      # The runtime bundle is not committed to the repository, so a local
+      # `npm run dev` needs it from somewhere. Download this artifact and unzip
+      # it into public/dotnet/ if you do not have the .NET SDK installed.
+      - name: Upload the runtime bundle on its own
+        uses: actions/upload-artifact@v4
+        with:
+          name: dotnet-runtime-bundle
+          retention-days: 7
+          path: public/dotnet

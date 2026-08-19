@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>$(DotNetCoderTargetFramework)</TargetFramework>
+    <RuntimeIdentifier>browser-wasm</RuntimeIdentifier>
+    <OutputType>Exe</OutputType>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <WasmMainJSPath>wwwroot/main.js</WasmMainJSPath>
+
+    <!-- Roslyn reads its reference assemblies as ordinary PE images. Webcil
+         (the default packaging since .NET 8) rewraps assemblies in a WASM
+         container, which MetadataReference.CreateFromImage cannot parse. Keep
+         plain .dll files so the published framework doubles as the reference
+         set handed to the compiler. -->
+    <WasmEnableWebcil>false</WasmEnableWebcil>
+
+    <!-- Student code may reference anything in the BCL, and the IL trimmer
+         cannot see through Roslyn, so nothing may be trimmed away. This is the
+         single biggest contributor to bundle size; see README "Bundle size". -->
+    <PublishTrimmed>false</PublishTrimmed>
+    <PublishTrimmed Condition="'$(TrimRuntime)' == 'true'">true</PublishTrimmed>
+
+    <!-- .NET threads are not used: the console bridge blocks the worker thread
+         from JavaScript via Atomics.wait instead. -->
+    <WasmEnableThreads>false</WasmEnableThreads>
+
+    <!-- Drops ~10MB of ICU data. Culture-sensitive formatting falls back to the
+         invariant culture, which is what a teaching console app wants anyway. -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+
+    <EventSourceSupport>false</EventSourceSupport>
+    <MetricsSupport>false</MetricsSupport>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="$(RoslynVersion)" />
+    <PackageReference Include="Microsoft.CodeAnalysis.VisualBasic" Version="$(RoslynVersion)" />
+  </ItemGroup>
+
+  <!-- Microsoft.VisualBasic.Core lives in the shared framework but nothing in a
+       C# host references it, so name it explicitly to guarantee it is published
+       and therefore available as a reference for VB.NET compilations. -->
+  <ItemGroup>
+    <TrimmerRootAssembly Include="Microsoft.VisualBasic.Core" />
+    <TrimmerRootAssembly Include="System.Runtime" />
+  </ItemGroup>
+
+</Project>

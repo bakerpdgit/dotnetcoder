@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Exercises the compile/run core of the runner on desktop .NET, where it is
+    fast to iterate and easy to debug. It compiles the same Runner.cs and
+    ConsoleBridge.cs the browser build uses, with a stub in place of the
+    JavaScript bridge, and feeds Roslyn the running framework's own assemblies
+    as references, which is exactly what the browser does with the contents of
+    _framework/.
+
+    Run it with:  npm run test:runtime
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>$(DotNetCoderTargetFramework)</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>DotNetCoder.Tests</RootNamespace>
+    <AssemblyName>DotNetCoder.Runner.Tests</AssemblyName>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+
+    <!-- The browser runtime is built with InvariantGlobalization, so match it
+         here. Otherwise the harness runs under the host machine's culture and
+         stops being a faithful simulation of what students will see: number and
+         date formatting could differ between this test run and the browser. -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="HostStub.cs" />
+    <Compile Include="Harness.cs" />
+    <Compile Include="../DotNetCoder.Runner/ConsoleBridge.cs" Link="ConsoleBridge.cs" />
+    <Compile Include="../DotNetCoder.Runner/Runner.cs" Link="Runner.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="$(RoslynVersion)" />
+    <PackageReference Include="Microsoft.CodeAnalysis.VisualBasic" Version="$(RoslynVersion)" />
+  </ItemGroup>
+
+</Project>

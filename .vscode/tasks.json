@@ -1,0 +1,52 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "type": "npm",
+      "script": "build",
+      "problemMatcher": ["$tsc"],
+      "group": "build",
+      "label": "npm: build",
+      "detail": "tsc -b && vite build -> dist/"
+    },
+    {
+      "label": "build the .NET runtime bundle",
+      "type": "shell",
+      "windows": { "command": "npm run build:runtime:win" },
+      "linux": { "command": "npm run build:runtime" },
+      "osx": { "command": "npm run build:runtime" },
+      "problemMatcher": [],
+      "detail": "Publishes runtime/ to public/dotnet/. Needs a .NET SDK (9+) and the wasm-tools workload."
+    },
+    {
+      "label": "build runner tests",
+      "type": "shell",
+      "command": "dotnet build runtime/DotNetCoder.Runner.Tests -c Debug",
+      "problemMatcher": ["$msCompile"],
+      "detail": "Compiles the desktop test harness so the C# debugger can attach."
+    },
+    {
+      "label": "test the .NET compiler core",
+      "type": "npm",
+      "script": "test:runtime",
+      "problemMatcher": ["$msCompile"],
+      "group": "test",
+      "detail": "Runs Runner.cs on desktop .NET - do this first after changing runtime/."
+    },
+    {
+      "label": "test the front end",
+      "type": "npm",
+      "script": "test",
+      "problemMatcher": [],
+      "group": { "kind": "test", "isDefault": true }
+    },
+    {
+      "label": "test end to end",
+      "type": "npm",
+      "script": "test:e2e",
+      "problemMatcher": [],
+      "group": "test",
+      "detail": "Playwright against the built app. Run 'npm: build' first."
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  // public/dotnet is ~200 generated files; hiding it keeps search and the
+  // explorer usable. Delete this entry if you need to inspect the bundle.
+  "files.exclude": {
+    "**/node_modules": true,
+    "**/dist": true,
+    "**/public/dotnet": true,
+    "**/*.tsbuildinfo": true
+  },
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/dist": true,
+    "**/public/dotnet": true,
+    "**/package-lock.json": true
+  },
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "editor.formatOnSave": false,
+  "files.eol": "\n",
+  "[powershell]": { "files.eol": "\r\n" }
+}

@@ -1,0 +1,78 @@
+{
+  // Press F5 with "Run in browser (dev server)" selected. It starts Vite,
+  // waits for the URL to appear, then opens Chrome with the debugger attached,
+  // so breakpoints work in .tsx files and in the runner worker.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run in browser (dev server)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"],
+      // Vite colours the URL. NO_COLOR keeps the line plain text so the pattern
+      // below cannot be broken by ANSI escape codes sitting inside the match.
+      "env": { "NO_COLOR": "1", "FORCE_COLOR": "0" },
+      "serverReadyAction": {
+        // Vite prints e.g.  ->  Local:   http://localhost:3000/
+        "pattern": "Local:\\s+(https?://\\S+)",
+        "uriFormat": "%s",
+        "action": "debugWithChrome",
+        "webRoot": "${workspaceFolder}"
+      }
+    },
+    {
+      "name": "Open browser only (dev server already running)",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:3000",
+      "webRoot": "${workspaceFolder}",
+      "sourceMaps": true
+    },
+    {
+      "name": "Run in browser (production build)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "program": "${workspaceFolder}/server.mjs",
+      "preLaunchTask": "npm: build",
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"],
+      "serverReadyAction": {
+        // server.mjs prints: dotnetcoder serving dist/ on http://localhost:3000
+        "pattern": "serving dist/ on (https?://\\S+)",
+        "uriFormat": "%s",
+        "action": "debugWithChrome",
+        "webRoot": "${workspaceFolder}/dist"
+      }
+    },
+    {
+      // Breakpoint into Runner.cs / ConsoleBridge.cs without a browser in the
+      // loop. Needs the C# extension (ms-dotnettools.csharp).
+      "name": "Debug the .NET compiler core",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build runner tests",
+      // The folder name follows the target framework, which follows your SDK.
+      // On .NET 9 change net10.0 to net9.0 here.
+      "program": "${workspaceFolder}/runtime/DotNetCoder.Runner.Tests/bin/Debug/net10.0/DotNetCoder.Runner.Tests.dll",
+      "cwd": "${workspaceFolder}/runtime/DotNetCoder.Runner.Tests",
+      "console": "integratedTerminal",
+      "stopAtEntry": false
+    },
+    {
+      "name": "Debug the Vitest unit tests",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "program": "${workspaceFolder}/node_modules/vitest/vitest.mjs",
+      "args": ["run", "--pool=forks", "--no-file-parallelism"],
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"],
+      "smartStep": true
+    }
+  ]
+}

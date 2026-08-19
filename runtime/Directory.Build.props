@@ -1,0 +1,28 @@
+<Project>
+
+  <!--
+    Shared by the runner and its test project so they can never drift apart.
+
+    The target framework follows whichever .NET SDK you have installed. The
+    build scripts detect it and export DotNetCoderTargetFramework before calling
+    dotnet, so a machine with the .NET 10 SDK builds net10.0 and a machine with
+    .NET 9 builds net9.0. Set the environment variable yourself to override, or
+    change the default below.
+
+    Whatever you pick, the matching wasm-tools workload has to be installed for
+    that SDK band, because the browser-wasm runtime packs come from it.
+  -->
+  <PropertyGroup>
+    <DotNetCoderTargetFramework Condition="'$(DotNetCoderTargetFramework)' == ''">net10.0</DotNetCoderTargetFramework>
+  </PropertyGroup>
+
+  <!--
+    The Roslyn version, shared by the runner and its tests. Raising it unlocks
+    newer C# and VB language versions (the compiler decides what
+    LanguageVersion.Latest means, not the SDK).
+  -->
+  <PropertyGroup>
+    <RoslynVersion Condition="'$(RoslynVersion)' == ''">4.12.0</RoslynVersion>
+  </PropertyGroup>
+
+</Project>
