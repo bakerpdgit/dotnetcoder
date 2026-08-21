@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CodeEditor, type EditorHandle } from './components/CodeEditor'
 import { ConsolePanel } from './components/ConsolePanel'
 import { FileSystemPanel } from './components/FileSystemPanel'
+import { AboutDialog } from './components/dialogs/AboutDialog'
 import { useDialogs } from './components/dialogs/DialogProvider'
 import { IconButton } from './components/ui/IconButton'
 import { ThemeToggleButton } from './components/ui/ThemeToggleButton'
@@ -43,6 +44,7 @@ export function App() {
   const [dirty, setDirty] = useState(false)
   const [reloadTrigger, setReloadTrigger] = useState(0)
   const [banner, setBanner] = useState<string | null>(null)
+  const [aboutOpen, setAboutOpen] = useState(false)
   const [runArgs, setRunArgs] = useState(loadRunArgs)
   const [fixedInput, setFixedInput] = useState(loadFixedInput)
   const [layout, setLayout] = useState(loadLayout)
@@ -313,8 +315,11 @@ export function App() {
   return (
     <div className="flex h-screen w-screen flex-col gap-2 bg-slate-950 p-2">
       <header className="flex shrink-0 flex-wrap items-center gap-2 rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2">
-        <h1 className="mr-2 text-sm font-semibold tracking-tight text-slate-100">
-          .NET <span className="text-emerald-400">Coder</span>
+        {/* Descriptive, not a brand: the MIT licence on the .NET runtime grants
+            no trademark rights, so the name says what this is rather than
+            leading with Microsoft's mark. See THIRD-PARTY-NOTICES.md. */}
+        <h1 className="mr-2 whitespace-nowrap text-sm font-semibold tracking-tight text-slate-100">
+          A .NET <span className="text-emerald-400">Coder</span>
         </h1>
 
         <label className="flex items-center gap-1.5 text-xs text-slate-400">
@@ -383,6 +388,11 @@ export function App() {
             </svg>
           </IconButton>
           <ThemeToggleButton theme={theme} onToggle={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))} />
+          <IconButton label="About, limitations and credits" onClick={() => setAboutOpen(true)}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="9" /><path d="M12 11v5" /><path d="M12 8h.01" />
+            </svg>
+          </IconButton>
         </div>
       </header>
 
@@ -478,6 +488,8 @@ export function App() {
           </div>
         </div>
       </main>
+
+      {aboutOpen && <AboutDialog onClose={() => setAboutOpen(false)} />}
     </div>
   )
 }

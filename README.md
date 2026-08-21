@@ -335,3 +335,34 @@ assembly downloads, each one is logged, and then nothing happens, with no error.
   memory. Reloading the page clears it.
 * Chrome or Edge is recommended: **Connect a folder** needs the File System
   Access API, which Firefox and Safari do not implement.
+* No NuGet, and no way to add external libraries: student code has the .NET
+  class library and nothing beyond it. This is a language sketchpad, not a
+  development environment.
+
+## Credits and licensing
+
+This project is MIT-licensed (see [`LICENSE`](LICENSE)). It redistributes a
+good deal of other people's work — the .NET runtime and class libraries and the
+Roslyn compilers (MIT, © .NET Foundation and Contributors), the Monaco Editor
+(MIT, © Microsoft Corporation) together with the Codicons icon font
+(**CC BY 4.0**, © Microsoft Corporation), React (MIT, © Meta Platforms, Inc.)
+and JSZip (used under the MIT half of its dual licence). Thanks to all of them.
+
+The full notices, with licence texts, are in
+[`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).
+
+Those obligations attach to the *distribution*, and for a web app the
+distribution is the page a student loads — so the notices are also served with
+the site, at `/third-party-notices.txt` and `/monaco-third-party-notices.txt`,
+and linked from the **About** dialog in the header.
+`scripts/copy-notices.mjs` writes those copies as a `prebuild` step, and
+`src/utils/notices.test.ts` fails if they drift out of step with the originals.
+
+### Trademarks
+
+The MIT licence grants rights in copyright only, never in trademarks. .NET,
+Visual Basic, Visual Studio and Microsoft are trademarks of the Microsoft group
+of companies, and this project is not affiliated with, endorsed by, or sponsored
+by Microsoft or the .NET Foundation. The interface therefore calls itself
+"A .NET Coder" — a description of what it is, rather than a name that leads with
+someone else's mark — and the About dialog says so explicitly.

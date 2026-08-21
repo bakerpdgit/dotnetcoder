@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "prebuild": "node scripts/copy-notices.mjs",
     "build": "tsc -b && vite build",
     "preview": "vite preview --port 3000",
     "start": "node server.mjs",
