@@ -1,3 +1,5 @@
+import type { EmscriptenFS } from '../utils/memfsBridge'
+
 /**
  * Minimal typings for the subset of the .NET WebAssembly runtime API we use.
  * The real module is `public/dotnet/_framework/dotnet.js`, produced by
@@ -10,6 +12,14 @@ export interface DotnetRuntimeApi {
   getAssemblyExports(assemblyName: string): Promise<Record<string, unknown>>
   getConfig(): { mainAssemblyName?: string }
   runMain?(mainAssemblyName?: string, args?: string[]): Promise<number>
+  /**
+   * The Emscripten module. `Module.FS` is the filesystem the student's program
+   * sees, and mounting the VFS into it is what makes File.ReadAllText work —
+   * see utils/memfsBridge.ts. It is exposed because dotnet.native.js does
+   * `Module['FS'] = FS`; typed as optional because nothing in the runtime's
+   * public contract promises it will stay that way.
+   */
+  Module?: { FS?: EmscriptenFS }
 }
 
 export interface DotnetHostBuilder {

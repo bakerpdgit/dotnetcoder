@@ -55,6 +55,20 @@ export interface VFSFile {
   mimeType: string
 }
 
+/** One file copied into the runtime's filesystem, keyed by its VFS path. */
+export interface MountedFile {
+  path: string
+  content: ArrayBuffer
+}
+
+/** What a program did to the filesystem while it ran. */
+export interface FsChanges {
+  writes: MountedFile[]
+  deletes: string[]
+  /** Folders that exist now and did not before, including empty ones. */
+  dirs: string[]
+}
+
 /** A filesystem mutation to mirror onto a connected local OS folder. */
 export type LocalFolderSyncOp =
   | { kind: 'write'; path: string; content: ArrayBuffer }
@@ -104,6 +118,17 @@ export type RunnerRequest =
       sources: Array<{ path: string; text: string }>
       /** Extra command-line arguments passed to Main. */
       args: string[]
+      /**
+       * The whole filesystem, mounted so the program can read and write it.
+       *
+       * These are the same files `sources` was distilled from, plus everything
+       * that is not source: `File.ReadAllText("data.txt")` has to find the
+       * data.txt the student made in the Files panel. The buffers are
+       * transferred, not copied.
+       */
+      files: MountedFile[]
+      /** Folder paths, so an empty folder still exists for the program. */
+      dirs: string[]
     }
   | { type: 'cancel' }
 
@@ -115,6 +140,11 @@ export type RunnerEvent =
   | { type: 'stderr'; text: string }
   | { type: 'diagnostics'; diagnostics: CompilerDiagnostic[] }
   | { type: 'input-request'; prompt: string }
+  /**
+   * What the program did to the filesystem, sent once the run has finished so
+   * the UI can write it back into IndexedDB. Absent when nothing changed.
+   */
+  | { type: 'fs-changes'; changes: FsChanges }
   | { type: 'exit'; code: number }
   | { type: 'fatal'; message: string }
 

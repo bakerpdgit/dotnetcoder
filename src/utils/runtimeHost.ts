@@ -102,9 +102,16 @@ export function stopWorkerRuntime(): void {
   queued = []
 }
 
-export function postToRuntime(request: RunnerRequest): boolean {
+/**
+ * `transfer` moves the mounted filesystem's buffers instead of copying them, so
+ * running a project with a few megabytes of data files does not duplicate them
+ * on the way to the worker. The caller must not touch a transferred buffer
+ * afterwards — they come fresh out of IndexedDB, so nothing does.
+ */
+export function postToRuntime(request: RunnerRequest, transfer?: Transferable[]): boolean {
   if (!worker) return false
-  worker.postMessage(request)
+  if (transfer && transfer.length > 0) worker.postMessage(request, transfer)
+  else worker.postMessage(request)
   return true
 }
 

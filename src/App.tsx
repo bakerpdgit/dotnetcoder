@@ -13,9 +13,9 @@ import {
 import { parseArgs } from './utils/args'
 import { SELECTABLE_LANGUAGES, getLanguage, isLanguageId } from './utils/languages'
 import {
-  DEFAULT_FS_ID, createFilesystem, ensureDefaultFilesystem, ensureLanguageEntryPoint,
-  getAllEntries, getEntryByPath, getSourceFiles, guessMimeType, importFileMapToFs,
-  listFilesystems, writeFile,
+  DEFAULT_FS_ID, basename, createFilesystem, deleteEntry, ensureDefaultFilesystem,
+  ensureFolders, ensureLanguageEntryPoint, getAllEntries, getEntryByPath, getParentPath,
+  getSourceFiles, guessMimeType, importFileMapToFs, listFilesystems, writeFile,
 } from './utils/virtualFS'
 import {
   deleteFromFolderHandle, mkdirInFolderHandle, readDirectoryToMap,
@@ -26,14 +26,15 @@ import {
   saveActiveFilesystem, saveFixedInput, saveLanguage, saveLayout, saveRunArgs, saveTheme,
   toInputLines,
 } from './utils/storage'
-import type { CompilerDiagnostic, LanguageId, LocalFolderSyncOp, Theme, VFSEntry } from './types'
+import type {
+  CompilerDiagnostic, FsChanges, LanguageId, LocalFolderSyncOp, Theme, VFSEntry,
+} from './types'
 
 const decoder = new TextDecoder()
 const encoder = new TextEncoder()
 
 export function App() {
   const dialogs = useDialogs()
-  const runner = useRunner()
 
   const [theme, setTheme] = useState<Theme>(loadTheme)
   const [language, setLanguage] = useState<LanguageId>(loadLanguage)
@@ -245,6 +246,50 @@ export function App() {
 
   // ── Running ─────────────────────────────────────────────────────────────
 
+  /**
+   * Saves what the program wrote back into the filesystem it read from.
+   *
+   * The runner mounts the whole filesystem for the duration of a run and diffs
+   * it afterwards (see utils/memfsBridge.ts), so what arrives here is only what
+   * actually changed — a program that reads a file and writes nothing produces
+   * no work at all.
+   */
+  const applyFsChanges = useCallback(async (changes: FsChanges) => {
+    const fsId = activeFilesystemId
+    try {
+      for (const dir of changes.dirs) {
+        await ensureFolders(fsId, dir)
+        await syncToLocalFolder({ kind: 'mkdir', path: dir })
+      }
+      for (const write of changes.writes) {
+        await ensureFolders(fsId, getParentPath(write.path))
+        await writeFile(fsId, write.path, write.content, guessMimeType(basename(write.path)))
+        await syncToLocalFolder({ kind: 'write', path: write.path, content: write.content })
+      }
+      for (const path of changes.deletes) {
+        await deleteEntry(fsId, path)
+        await syncToLocalFolder({ kind: 'delete', path })
+      }
+    } catch (error) {
+      showBanner(`The program ran, but saving what it wrote failed: ${String(error)}`)
+    }
+
+    setReloadTrigger(t => t + 1)
+
+    // The editor is showing a stale copy if the program rewrote the open file.
+    // Safe to reload without losing work: handleRun flushes pending edits first.
+    const open = openFilePathRef.current
+    if (!open) return
+    if (changes.deletes.some(path => open === path || open.startsWith(`${path}/`))) {
+      setOpenFilePath(null)
+      setEditorValue('')
+    } else if (changes.writes.some(write => write.path === open)) {
+      await openPath(fsId, open)
+    }
+  }, [activeFilesystemId, openPath, showBanner, syncToLocalFolder])
+
+  const runner = useRunner(applyFsChanges)
+
   const handleRun = useCallback(async () => {
     if (!runner.ready || runner.running) return
     await flushSave()
@@ -253,8 +298,17 @@ export function App() {
       showBanner(`There are no ${getLanguage(language).extension} files in this filesystem to run.`)
       return
     }
+    // The whole filesystem goes to the runtime, not just the sources: the point
+    // is that File.ReadAllText("data.txt") finds the data.txt in the panel.
+    // Folders travel separately so an empty one still exists for the program.
+    const entries = await getAllEntries(activeFilesystemId)
+    const files = entries
+      .filter(entry => entry.type === 'file' && entry.content !== undefined)
+      .map(entry => ({ path: entry.path, content: entry.content! }))
+    const dirs = entries.filter(entry => entry.type === 'folder').map(entry => entry.path)
+
     runner.clearOutput()
-    runner.run(language, sources, parseArgs(runArgs), toInputLines(fixedInput))
+    runner.run(language, sources, parseArgs(runArgs), toInputLines(fixedInput), files, dirs)
   }, [activeFilesystemId, fixedInput, flushSave, language, runArgs, runner, showBanner])
 
   const selectDiagnostic = useCallback(async (diagnostic: CompilerDiagnostic) => {

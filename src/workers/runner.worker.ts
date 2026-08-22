@@ -13,21 +13,30 @@
  * instead (see utils/mainThreadRuntime.ts): no blocking input, but it isolates
  * whether the worker is the problem.
  */
-import type { CompileResultJson, RunnerEvent, RunnerRequest } from '../types'
+import type { CompileResultJson, FsChanges, RunnerEvent, RunnerRequest } from '../types'
 import { awaitLine, createStdinChannel, markWaiting, type StdinChannel } from '../utils/stdinChannel'
 import { WORKER_STALL_WARNING_MS } from '../constants'
 import { bootDotnetRuntime, describeError } from './bootRuntime'
 import type { RunnerExports } from './dotnetRuntime'
 import { prepareDotnetWorkerEnvironment, type DotnetWorkerScope } from './workerEnvironment'
+import {
+  changeBuffers, clearMount, diffMount, isEmptyChanges, mountFiles, walkMount,
+  type EmscriptenFS, type MountSnapshot,
+} from '../utils/memfsBridge'
 
 const ctx = self as unknown as DedicatedWorkerGlobalScope
 
 let runner: RunnerExports | null = null
 let stdin: StdinChannel | null = null
 let initPromise: Promise<void> | null = null
+// The filesystem the student's program sees. Null only if the runtime bundle
+// stops exposing Module.FS; see utils/memfsBridge.ts.
+let fs: EmscriptenFS | null = null
+let reservedRootNames: string[] = []
 
-function post(event: RunnerEvent): void {
-  ctx.postMessage(event)
+function post(event: RunnerEvent, transfer?: Transferable[]): void {
+  if (transfer && transfer.length > 0) ctx.postMessage(event, transfer)
+  else ctx.postMessage(event)
 }
 
 /**
@@ -102,7 +111,7 @@ async function initialise(
 ): Promise<void> {
   if (sab) stdin = createStdinChannel(sab)
 
-  runner = await bootDotnetRuntime(runtimeBaseUrl, {
+  const booted = await bootDotnetRuntime(runtimeBaseUrl, {
     verbose,
     onStep: step,
     writeStdout: (text: string) => post({ type: 'stdout', text }),
@@ -111,6 +120,10 @@ async function initialise(
     onReferenceProgress: (loaded, total) =>
       post({ type: 'status', phase: 'loading-references', detail: `${loaded}/${total}` }),
   })
+
+  runner = booted.runner
+  fs = booted.fs
+  reservedRootNames = booted.reservedRootNames
 
   stepDone()
   post({ type: 'status', phase: 'ready', detail: `${runner.ReferenceCount()} references` })
@@ -155,20 +168,74 @@ function compileAndRun(request: Extract<RunnerRequest, { type: 'run' }>): void {
     return
   }
 
+  // Everything the student made in the Files panel, put where their program can
+  // open it. The snapshot taken straight afterwards is the baseline the
+  // write-back diffs against.
+  const before = mountForRun(request.files, request.dirs)
+
   post({ type: 'status', phase: 'running' })
 
   let result: { exitCode: number; error?: string | null }
   try {
     result = JSON.parse(runner.Run(JSON.stringify(request.args))) as { exitCode: number; error?: string | null }
   } catch (error) {
+    // Report the files anyway: a program that wrote its output and *then* threw
+    // should not lose the output as well.
+    reportFileChanges(before)
     post({ type: 'fatal', message: `The program could not be started: ${describeError(error)}` })
     return
   }
 
   if (result.error) post({ type: 'stderr', text: result.error + '\n' })
+  reportFileChanges(before)
   post({ type: 'status', phase: 'idle' })
   post({ type: 'exit', code: result.exitCode })
 }
+
+// ── filesystem ─────────────────────────────────────────────────────────────
+
+/**
+ * Replaces the mount with `files`/`dirs` and returns the baseline snapshot, or
+ * null when there is no filesystem to mount into.
+ */
+function mountForRun(files: RunFiles['files'], dirs: RunFiles['dirs']): MountSnapshot | null {
+  if (!fs) return null
+  try {
+    // MEMFS survives between runs, so last run's leftovers have to go first —
+    // otherwise a file deleted in the Files panel is still readable.
+    clearMount(fs, reservedRootNames)
+    const mounted = mountFiles(fs, files, dirs, reservedRootNames)
+    if (mounted.skipped.length > 0) {
+      post({
+        type: 'stderr',
+        text: `[these folders share a name with a .NET runtime directory and were not mounted: ${mounted.skipped.join(', ')}]\n`,
+      })
+    }
+    if (mounted.truncated) {
+      post({ type: 'stderr', text: '[the filesystem is too large to mount in full — some files are not visible to your program]\n' })
+    }
+    return walkMount(fs, reservedRootNames)
+  } catch (error) {
+    post({ type: 'stderr', text: `[could not mount the filesystem: ${describeError(error)}]\n` })
+    return null
+  }
+}
+
+/** Sends whatever the program changed back to the UI, to be saved in the VFS. */
+function reportFileChanges(before: MountSnapshot | null): void {
+  if (!fs || !before) return
+  let changes: FsChanges
+  try {
+    changes = diffMount(before, walkMount(fs, reservedRootNames))
+  } catch (error) {
+    post({ type: 'stderr', text: `[could not read back the filesystem: ${describeError(error)}]\n` })
+    return
+  }
+  if (isEmptyChanges(changes)) return
+  post({ type: 'fs-changes', changes }, changeBuffers(changes))
+}
+
+type RunFiles = Extract<RunnerRequest, { type: 'run' }>
 
 // ── message pump ───────────────────────────────────────────────────────────
 

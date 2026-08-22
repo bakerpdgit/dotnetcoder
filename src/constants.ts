@@ -24,6 +24,16 @@ export const SAB_STATE_EOF = 2
 /** Maximum console lines retained before the oldest are dropped. */
 export const CONSOLE_SCROLLBACK_LINES = 5000
 
+/**
+ * How much of the virtual filesystem is copied into the runtime for one run.
+ *
+ * Everything mounted lands in the WASM heap, which is capped and already shared
+ * with Roslyn and the loaded framework. This is far more than a class exercise
+ * needs and still nowhere near the ceiling; past it the mount is truncated and
+ * the console says so, which beats an out-of-memory abort with no explanation.
+ */
+export const MAX_VFS_MOUNT_BYTES = 32 * 1024 * 1024
+
 export const MIN_SIDEBAR_WIDTH = 180
 export const MAX_SIDEBAR_WIDTH = 520
 export const MIN_CONSOLE_HEIGHT = 100
