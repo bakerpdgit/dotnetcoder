@@ -32,7 +32,7 @@ test('the IDE shell loads and shows the C# starter file', async ({ page }) => {
   await page.goto('/')
 
   await expect(page.getByRole('heading', { name: /Coder/ })).toBeVisible()
-  await expect(page.getByRole('combobox')).toHaveValue('csharp')
+  await expect(page.getByRole('combobox', { name: 'Language' })).toHaveValue('csharp')
   await expect(page.getByText('/Program.cs').first()).toBeVisible({ timeout: 20_000 })
 
   // Monaco mounted and has the template in it.
@@ -47,7 +47,7 @@ test('the language picker switches to VB.NET and creates a starter file', async 
   await page.goto('/')
   await expect(page.locator('.view-lines')).toContainText('Hello, World!', { timeout: 20_000 })
 
-  await page.getByRole('combobox').selectOption('vb')
+  await page.getByRole('combobox', { name: 'Language' }).selectOption('vb')
 
   await expect(page.getByText('/Program.vb').first()).toBeVisible({ timeout: 20_000 })
   await expect(page.locator('.view-lines')).toContainText('End Module', { timeout: 20_000 })
@@ -85,7 +85,7 @@ test('the language picker offers only languages that can run', async ({ page }) 
 
   // F# is parked until FSharp.Compiler.Service is wired up; offering a language
   // that cannot run is worse than not offering it.
-  const options = page.getByRole('combobox').locator('option')
+  const options = page.getByRole('combobox', { name: 'Language' }).locator('option')
   await expect(options).toHaveText([/C#/, /VB\.NET/])
 })
 

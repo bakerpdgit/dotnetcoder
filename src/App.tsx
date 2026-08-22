@@ -11,6 +11,9 @@ import {
   MAX_CONSOLE_HEIGHT, MAX_SIDEBAR_WIDTH, MIN_CONSOLE_HEIGHT, MIN_SIDEBAR_WIDTH,
 } from './constants'
 import { parseArgs } from './utils/args'
+import {
+  EXAMPLES, examplePath, exampleSource, findExample, hasExamples,
+} from './utils/examples'
 import { SELECTABLE_LANGUAGES, getLanguage, isLanguageId } from './utils/languages'
 import {
   DEFAULT_FS_ID, basename, createFilesystem, deleteEntry, ensureDefaultFilesystem,
@@ -153,7 +156,12 @@ export function App() {
     await flushSave()
     setLanguage(next)
     try {
-      const entryPoint = await ensureLanguageEntryPoint(activeFilesystemId, next)
+      // A linked filesystem is somebody's real folder on disk. Dropping a
+      // Program.vb into it because they clicked the language picker is not our
+      // call to make; Run says plainly when there is nothing to compile.
+      const entryPoint = localFolderFsId === activeFilesystemId
+        ? null
+        : await ensureLanguageEntryPoint(activeFilesystemId, next)
       const sources = await getSourceFiles(activeFilesystemId, next)
       const target = entryPoint ?? sources[0]?.path
       if (target) {
@@ -167,14 +175,22 @@ export function App() {
     } catch (error) {
       showBanner(String(error))
     }
-  }, [activeFilesystemId, flushSave, language, openPath, showBanner])
+  }, [activeFilesystemId, flushSave, language, localFolderFsId, openPath, showBanner])
 
-  const switchFilesystem = useCallback(async (id: string) => {
+  /**
+   * `seedStarter` creates a `Program.cs`/`Program.vb` when the filesystem has
+   * no source of the current language, so the editor always has something to
+   * show. It is turned off when the filesystem is somebody's own folder on
+   * disk: writing a file there is a real change to their computer, and it
+   * should be their decision rather than a side effect of connecting.
+   */
+  const switchFilesystem = useCallback(async (id: string, options: { seedStarter?: boolean } = {}) => {
+    const seedStarter = options.seedStarter !== false
     await flushSave()
     setActiveFilesystemId(id)
     setCurrentPath('/')
     try {
-      const entryPoint = await ensureLanguageEntryPoint(id, language)
+      const entryPoint = seedStarter ? await ensureLanguageEntryPoint(id, language) : null
       const sources = await getSourceFiles(id, language)
       const target = entryPoint ?? sources[0]?.path
       if (target) await openPath(id, target)
@@ -198,15 +214,42 @@ export function App() {
       })
       return
     }
+    // Asked *before* the folder picker, so the browser only ever requests the
+    // access that was actually chosen — and so nobody grants write access to a
+    // real folder without being told what that means.
+    const mode = await dialogs.choose({
+      title: 'Connect a folder on this computer',
+      message: 'How should this folder be connected?',
+      warning: 'A two-way link writes to the real folder on your computer. That includes files your programs create, and deleting a file here deletes it there.',
+      choices: [
+        {
+          value: 'link',
+          label: 'Two-way link',
+          description: 'Open the folder and keep it in step: saving, creating, renaming and deleting here are applied to the folder straight away, as is anything your programs write.',
+        },
+        {
+          value: 'import',
+          label: 'One-way import (a copy)',
+          description: 'Copy the files in now and leave the folder alone. Nothing is ever written back to your computer.',
+        },
+      ],
+    })
+    if (mode === null) return
+
     try {
-      const handle = await picker({ mode: 'readwrite' })
+      const handle = await picker({ mode: mode === 'link' ? 'readwrite' : 'read' })
       const files = await readDirectoryToMap(handle)
       const created = await createFilesystem(handle.name)
       await importFileMapToFs(created.id, files)
-      setLocalFolderHandle(handle)
-      setLocalFolderFsId(created.id)
-      await switchFilesystem(created.id)
-      showBanner(`Connected "${handle.name}". Edits here are written back to that folder.`)
+      if (mode === 'link') {
+        setLocalFolderHandle(handle)
+        setLocalFolderFsId(created.id)
+      }
+      // No starter file: this is the user's own folder, not an empty workspace.
+      await switchFilesystem(created.id, { seedStarter: false })
+      showBanner(mode === 'link'
+        ? `Linked "${handle.name}". Changes here are written to that folder.`
+        : `Imported a copy of "${handle.name}". Your folder will not be changed.`)
     } catch (error) {
       if ((error as DOMException)?.name === 'AbortError') return
       showBanner(`Could not connect the folder: ${String(error)}`)
@@ -243,6 +286,90 @@ export function App() {
       showBanner(`The change was saved in the browser but not on disk: ${String(error)}`)
     }
   }, [activeFilesystemId, localFolderFsId, localFolderHandle, showBanner])
+
+  // ── Examples ────────────────────────────────────────────────────────────
+
+  /** An existing filesystem with this name, or a new one. */
+  const findOrCreateFilesystem = useCallback(async (name: string) => {
+    const known = await listFilesystems()
+    return known.find(entry => entry.name === name) ?? await createFilesystem(name)
+  }, [])
+
+  /**
+   * Writes a ready-made example into a filesystem and opens it, so the next
+   * thing to do is press Run.
+   *
+   * The wrinkle is that C# and VB.NET allow one entry point per program, and
+   * every source file in the filesystem is compiled together. Adding an example
+   * next to an existing Program.cs would therefore produce CS0017 rather than a
+   * working example — so when there is already code here, the student is asked
+   * where it should go rather than being handed a compile error.
+   */
+  const addExample = useCallback(async (id: string) => {
+    const example = findExample(id)
+    if (!example || !hasExamples(language)) return
+    const path = examplePath(example, language)
+    const source = exampleSource(example, language)
+
+    try {
+      const others = (await getSourceFiles(activeFilesystemId, language))
+        .filter(file => file.path !== path)
+
+      let targetFsId = activeFilesystemId
+      if (others.length > 0) {
+        const where = await dialogs.choose({
+          title: `Add "${example.label}"?`,
+          message: `There is already ${getLanguage(language).label} code in this filesystem, and a program can only have one Main.`,
+          choices: [
+            {
+              value: 'new',
+              label: 'Put it in a filesystem of its own',
+              description: `Uses a workspace called "${example.label}" holding just this example, and switches to it. What is here now is left alone.`,
+            },
+            {
+              value: 'here',
+              label: 'Add it here anyway',
+              description: `Writes ${path} alongside ${others.length === 1 ? others[0].path : `the ${others.length} files already here`}. It will not run until the other Main is removed or renamed.`,
+            },
+          ],
+        })
+        if (where === null) return
+        if (where === 'new') targetFsId = (await findOrCreateFilesystem(example.label)).id
+      }
+
+      // Never quietly overwrite a copy somebody has been working on.
+      if (await getEntryByPath(targetFsId, path)) {
+        const replace = await dialogs.confirm({
+          title: 'Replace the example?',
+          message: `${path} already exists there.`,
+          warning: 'Any changes you have made to it will be lost.',
+          confirmLabel: 'Replace',
+          destructive: true,
+        })
+        if (!replace) return
+      }
+
+      await flushSave()
+      const content = encoder.encode(source).buffer as ArrayBuffer
+      await writeFile(targetFsId, path, content, guessMimeType(path))
+
+      if (targetFsId === activeFilesystemId) {
+        await syncToLocalFolder({ kind: 'write', path, content })
+        await openPath(targetFsId, path)
+        setReloadTrigger(t => t + 1)
+      } else {
+        // A fresh workspace of its own, so there is no starter file to seed.
+        await switchFilesystem(targetFsId, { seedStarter: false })
+        await openPath(targetFsId, path)
+      }
+      showBanner(`Added ${path}. Press Run to try it.`)
+    } catch (error) {
+      showBanner(`Could not add the example: ${String(error)}`)
+    }
+  }, [
+    activeFilesystemId, dialogs, findOrCreateFilesystem, flushSave, language,
+    openPath, showBanner, switchFilesystem, syncToLocalFolder,
+  ])
 
   // ── Running ─────────────────────────────────────────────────────────────
 
@@ -393,6 +520,30 @@ export function App() {
             ))}
           </select>
         </label>
+
+        {/* Value is always '', so the menu reads as an action rather than a
+            setting and the same example can be added twice. */}
+        {hasExamples(language) && (
+          <label className="flex items-center gap-1.5 text-xs text-slate-400">
+            Examples
+            <select
+              value=""
+              onChange={(event) => {
+                const chosen = event.target.value
+                if (chosen) void addExample(chosen)
+              }}
+              title={`Add a ready-made ${getLanguage(language).label} example`}
+              className="max-w-[13rem] rounded-md border border-slate-600 bg-slate-800 px-2 py-1 text-sm text-slate-100 outline-none focus:border-emerald-500"
+            >
+              <option value="">Add…</option>
+              {EXAMPLES.map(example => (
+                <option key={example.id} value={example.id} title={example.summary}>
+                  {example.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
 
         <button
           type="button"

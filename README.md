@@ -101,7 +101,8 @@ unzip it into `public/dotnet/`; `npm run dev` will then work normally.
 ## Using it
 
 * **Language picker** — C# and VB.NET. Switching to a language with no source
-  files in the current workspace creates a starter file for it.
+  files in the current workspace creates a starter file for it — except in a
+  linked folder, which is never written to without being asked.
 * **Run (Ctrl+Enter or F5)** — compiles *every* source file of the active
   language in the current filesystem, so projects can be split across files.
 * **Troubleshooting the runtime** — the status line names the boot step in
@@ -136,11 +137,26 @@ unzip it into `public/dotnet/`; `npm run dev` will then work normally.
 * **Args** — passed to `Main(string[] args)`. Quoted arguments are honoured.
 * **Filesystems** — each is an independent workspace in IndexedDB. Create, rename,
   delete, import a `.zip` as a new filesystem, or download one as a `.zip`.
-* **Connect a folder** — reads a real folder from disk into a new filesystem and
-  mirrors every later change back to it (Chrome/Edge only; the File System
-  Access API does not exist in Firefox or Safari, where upload/download still
-  work). There is no file watching: use **Reload from the connected folder** to
-  pick up outside edits. Permissions reset on page reload.
+* **Examples** — eight ready-made programs, in whichever language is selected:
+  calculations, control structures, data structures, files, multiple classes,
+  inheritance, methods, and errors. Each is a single file that runs on its own.
+  Because a program may only have one `Main` and every source file in the
+  filesystem is compiled together, adding one to a filesystem that already has
+  code offers to put it in a workspace of its own instead.
+* **Connect a folder** — reads a real folder from disk into a new filesystem
+  (Chrome/Edge only; the File System Access API does not exist in Firefox or
+  Safari, where upload/download still work). You are asked which of two ways
+  first, *before* the browser's folder picker opens, so the page only requests
+  the access you chose:
+  * **Two-way link** — every later change here is mirrored back to the folder,
+    including files your programs write and deletions you make. There is no
+    file watching: use **Reload from the connected folder** to pick up outside
+    edits. Permissions reset on page reload.
+  * **One-way import** — takes a copy and never writes to your computer.
+
+  A connected folder is left as it was found: no starter file is created in it,
+  and switching language does not add one either. If there is nothing to
+  compile, **Run** says so instead.
 
 ### Implicit usings
 
@@ -243,6 +259,8 @@ src/
     dotnetRuntime.ts          Typings for dotnet.js + export resolution
   utils/
     virtualFS.ts              IndexedDB filesystems, entries, import/export
+    memfsBridge.ts            Mounts the filesystem into the runtime for a run
+    examples.ts               The Examples menu's programs, in C# and VB.NET
     stdinChannel.ts           The SharedArrayBuffer stdin protocol (both sides)
     languages.ts              Language registry (C#, VB.NET, F#)
     localFolderIo.ts          File System Access API helpers
@@ -252,7 +270,7 @@ src/
     CodeEditor.tsx            Monaco + diagnostic markers
     ConsolePanel.tsx          Console / Problems tabs, blocking input line
     FileSystemPanel.tsx       Filesystem browser, folder connect, zip import
-    dialogs/DialogProvider.tsx  Promise-based confirm/prompt/alert
+    dialogs/DialogProvider.tsx  Promise-based confirm/prompt/alert/choose
 
 runtime/
   DotNetCoder.Runner/         The WASM host

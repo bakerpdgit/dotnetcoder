@@ -65,6 +65,13 @@ export function AboutDialog({ onClose }: { onClose: () => void }) {
             environment. Real projects belong in a real IDE such as Visual Studio
             or VS Code; this is the sketchpad you reach for first.
           </p>
+          <p>
+            If you are not sure where to start, the <strong className="font-medium text-slate-200">Examples</strong>{' '}
+            menu at the top has eight short programs — calculations, loops,
+            arrays and dictionaries, files, classes, inheritance, methods and
+            error handling — in whichever language is selected. Each one is
+            ready to run and commented line by line.
+          </p>
         </Section>
 
         <Section title="What it cannot do">
@@ -104,6 +111,24 @@ export function AboutDialog({ onClose }: { onClose: () => void }) {
               in any modern browser.
             </li>
           </ul>
+        </Section>
+
+        <Section title="Connecting a folder on your computer">
+          <p>
+            <strong className="font-medium text-slate-200">Connect a folder</strong>{' '}
+            offers two ways in, and the difference matters. A{' '}
+            <strong className="font-medium text-slate-200">two-way link</strong>{' '}
+            keeps the folder in step: saving, creating, renaming and deleting
+            here happen in the real folder too, and so does anything your
+            programs write. A{' '}
+            <strong className="font-medium text-slate-200">one-way import</strong>{' '}
+            takes a copy and never writes back.
+          </p>
+          <p>
+            A linked folder is left exactly as it was found — no starter file is
+            created in it. If there is nothing to compile, Run says so rather
+            than adding a file to your computer to fix it.
+          </p>
         </Section>
 
         <Section title="Your code stays with you">
