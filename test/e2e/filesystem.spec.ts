@@ -202,7 +202,7 @@ End Module
     ])
     await page.reload()
     await waitForReady(page)
-    await page.getByRole('combobox').selectOption('vb')
+    await page.getByRole('combobox', { name: 'Language' }).selectOption('vb')
 
     await page.getByRole('button', { name: 'Run' }).click()
     await expect(consoleOutput(page)).toContainText('read=hello from vb', { timeout: 120_000 })

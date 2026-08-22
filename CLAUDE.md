@@ -154,6 +154,37 @@ Both hosts do this, in different places — the worker in `runner.worker.ts`, th
 UI thread inline in `useRunner.ts` — so `test/e2e/filesystem.spec.ts` runs the
 round trip against each in turn.
 
+### A connected folder is somebody's real computer
+
+**Connect a folder** asks how to connect *before* opening the browser's picker,
+so the page only ever requests the access that was chosen — a one-way import
+gets `mode: 'read'` and can never write back. Two rules follow from that, and
+`test/e2e/connectFolder.spec.ts` holds both:
+
+* **Never create a file in a linked folder unprompted.** `switchFilesystem`
+  takes `seedStarter`, and connecting passes `false`; `switchLanguage` skips
+  seeding when the active filesystem is the linked one. Run reports "no .cs
+  files in this filesystem to run" rather than fixing it by writing to
+  somebody's disk. Since programs can write files now, this matters more than
+  it used to.
+* **The choice comes first, not after.** Requesting `readwrite` and *then*
+  asking would already have prompted the user for write access.
+
+### Examples must compile, and only one may have a Main
+
+`src/utils/examples.ts` holds eight programs in both C# and VB.NET. Every source
+file of the active language is compiled together and a program may have only one
+entry point, so adding an example next to an existing `Program.cs` would produce
+CS0017 rather than a working example — `addExample` offers a filesystem of its
+own instead.
+
+Two testing notes. The sources are TypeScript template literals, so a lone
+backslash is an escape: VB's integer division `\` has to be written `\\`, and
+`examples.test.ts` fails if any other backslash survives. And
+`test/e2e/examples.spec.ts` compiles all sixteen through the real Roslyn — an
+example that does not compile is worse than no example, because it is the first
+thing a student clicks and they have no reason to suspect the IDE.
+
 ### The stdin protocol lives in one place
 
 `src/utils/stdinChannel.ts` defines the SharedArrayBuffer layout for both the UI
