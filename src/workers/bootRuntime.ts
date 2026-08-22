@@ -9,6 +9,27 @@
  * is reported) arrives through `callbacks`.
  */
 import { resolveRunnerExports, type DotnetHostBuilder, type RunnerExports } from './dotnetRuntime'
+import { readReservedRootNames, type EmscriptenFS } from '../utils/memfsBridge'
+
+/**
+ * A booted runtime: the compiler surface, plus the filesystem the student's
+ * program will see.
+ *
+ * `fs` is null only if a future runtime bundle stops exposing `Module.FS`. The
+ * hosts treat that as "file access is unavailable this session" rather than a
+ * fatal error — compiling and running still work, they just cannot see the
+ * Files panel.
+ */
+export interface BootedRuntime {
+  runner: RunnerExports
+  fs: EmscriptenFS | null
+  /**
+   * Top-level names that belong to the runtime (`/tmp`, `/proc`, …), captured
+   * before anything is mounted. See utils/memfsBridge.ts for why the mount
+   * point is `/` and why this has to be read rather than hard-coded.
+   */
+  reservedRootNames: string[]
+}
 
 export interface BootCallbacks {
   /** Named boot step, for progress display and stall diagnosis. */
@@ -49,7 +70,7 @@ async function mapWithConcurrency<T>(
 export async function bootDotnetRuntime(
   runtimeBaseUrl: string,
   callbacks: BootCallbacks,
-): Promise<RunnerExports> {
+): Promise<BootedRuntime> {
   const moduleUrl = `${runtimeBaseUrl}_framework/dotnet.js`
 
   callbacks.onStep('import dotnet.js')
@@ -122,6 +143,15 @@ export async function bootDotnetRuntime(
     console.warn('[dotnetcoder] compiler warm-up failed', error)
   }
 
-  if (callbacks.verbose) console.log(`[dotnetcoder] ready — ${runner.ReferenceCount()} references`)
-  return runner
+  // The filesystem the program will read and write. Captured here, while the
+  // mount is still exactly as the runtime left it, so `reservedRootNames` can
+  // never accidentally include something a student's program created.
+  const fs = api.Module?.FS ?? null
+  const reservedRootNames = fs ? readReservedRootNames(fs) : []
+
+  if (callbacks.verbose) {
+    console.log(`[dotnetcoder] ready — ${runner.ReferenceCount()} references`)
+    console.log(`[dotnetcoder] filesystem ${fs ? `available, reserved: ${reservedRootNames.join(', ')}` : 'unavailable'}`)
+  }
+  return { runner, fs, reservedRootNames }
 }

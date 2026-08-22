@@ -131,6 +131,29 @@ catch it.
 so it strips exactly the framework student code needs. This is the reason the
 bundle is ~20MB, and it is a deliberate trade.
 
+### The student's filesystem is mounted at `/`, and only for the run
+
+`File.ReadAllText("data.txt")` works because `src/utils/memfsBridge.ts` copies
+the whole VFS into the runtime's Emscripten filesystem before the program
+starts, and diffs it afterwards to see what to save. Three things about it are
+load-bearing:
+
+* **The mount point is `/`.** The runtime's working directory is `/`, so this is
+  the only mount point where `"data.txt"` and `"/data.txt"` are the same file and
+  a write through either one is captured. A mount under `/vfs` needs symlinks for
+  the absolute form, and writes through those land outside the mount and vanish.
+* **MEMFS outlives a run.** It belongs to the runtime, not the program, so the
+  mount is cleared before every run. Skip that and a file deleted in the Files
+  panel is still readable, and last run's output looks like this run's.
+* **The reserved names are read, not hard-coded.** `readReservedRootNames` grabs
+  the top-level entries at boot, before anything is mounted, and everything else
+  skips them. The set has changed between .NET versions; hard-coding it would
+  either shadow a real directory or import `/proc` into somebody's workspace.
+
+Both hosts do this, in different places — the worker in `runner.worker.ts`, the
+UI thread inline in `useRunner.ts` — so `test/e2e/filesystem.spec.ts` runs the
+round trip against each in turn.
+
 ### The stdin protocol lives in one place
 
 `src/utils/stdinChannel.ts` defines the SharedArrayBuffer layout for both the UI

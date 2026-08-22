@@ -124,6 +124,13 @@ unzip it into `public/dotnet/`; `npm run dev` will then work normally.
   closes stdin so `ReadLine()` returns `null`. Needs the worker runtime, since
   only there can the runtime block; a browser without workers falls back to the
   UI thread and says so.
+* **Files from student code** — `File.ReadAllText("data.txt")` reads the
+  `data.txt` in the panel, and `File.WriteAllText("out/result.txt", …)` puts a
+  file there once the program finishes. Folders work, nested as deep as you
+  like, and both relative and absolute paths resolve against the filesystem
+  root: `"data/in.txt"` and `"/data/in.txt"` are the same file. Binary I/O is
+  byte-exact. The filesystem is copied in fresh for every run, so a file you
+  delete in the panel really is gone next time.
 * **Problems tab** — Roslyn diagnostics; clicking one jumps to the position in
   the editor, which also gets red squiggles.
 * **Args** — passed to `Main(string[] args)`. Quoted arguments are honoured.
@@ -327,8 +334,12 @@ assembly downloads, each one is logged, and then nothing happens, with no error.
 ## Limitations
 
 * No debugger yet — breakpoints and stepping are the obvious next step.
-* No `HttpClient`, sockets, or real file I/O from student code; there is no
-  server and the WASM sandbox has no filesystem outside its own memory.
+* No `HttpClient` or sockets from student code; there is no server behind this
+  and the browser will not let WebAssembly open one.
+* File I/O reaches the virtual filesystem and nothing else — there is no path to
+  the real disk from inside a program. A folder whose name collides with one of
+  the runtime's own top-level directories (`tmp`, `home`, `dev`, `proc`, `usr`)
+  cannot be mounted; the console says so when it happens.
 * `Environment.Exit()` in student code terminates the runtime; press **Restart**.
 * Each run loads a new assembly into the default load context (Mono's WASM
   runtime has no collectible contexts), so a very long session slowly grows in

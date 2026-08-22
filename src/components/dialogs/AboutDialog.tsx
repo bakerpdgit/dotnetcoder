@@ -76,10 +76,17 @@ export function AboutDialog({ onClose }: { onClose: () => void }) {
               coursework, and a hard stop for anything else.
             </li>
             <li>
-              <strong className="font-medium text-slate-200">No network or files.</strong>{' '}
-              <code>HttpClient</code>, sockets and real file I/O are unavailable:
-              there is no server behind this, and the WebAssembly sandbox has no
-              filesystem outside its own memory.
+              <strong className="font-medium text-slate-200">No network.</strong>{' '}
+              <code>HttpClient</code> and sockets are unavailable: there is no
+              server behind this, and the browser will not let WebAssembly open
+              a socket.
+            </li>
+            <li>
+              <strong className="font-medium text-slate-200">Files, but only these files.</strong>{' '}
+              <code>File</code> and <code>Directory</code> work, and they see the
+              filesystem in the panel on the left — folders included. What your
+              program writes is saved there when it finishes. There is no access
+              to the real disk beyond that, and nothing outside the browser.
             </li>
             <li>
               <strong className="font-medium text-slate-200">No debugger yet.</strong>{' '}

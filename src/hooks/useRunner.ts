@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { CompilerDiagnostic, LanguageId, RunnerEvent, RunnerPhase, RunnerRequest } from '../types'
+import type {
+  CompilerDiagnostic, FsChanges, LanguageId, MountedFile, RunnerEvent, RunnerPhase, RunnerRequest,
+} from '../types'
 import { CONSOLE_SCROLLBACK_LINES, RUNTIME_BASE_PATH, WORKER_BOOT_TIMEOUT_MS } from '../constants'
 import { publishEof, publishLine } from '../utils/stdinChannel'
 import {
@@ -7,7 +9,10 @@ import {
   startWorkerRuntime, stopWorkerRuntime, subscribeToRuntime, unsubscribeFromRuntime,
 } from '../utils/runtimeHost'
 import { bootOnMainThread, resolveRuntimePreference, setPendingInput } from '../utils/mainThreadRuntime'
-import type { RunnerExports } from '../workers/dotnetRuntime'
+import type { BootedRuntime } from '../workers/bootRuntime'
+import {
+  clearMount, diffMount, isEmptyChanges, mountFiles, walkMount, type MountSnapshot,
+} from '../utils/memfsBridge'
 import type { CompileResultJson } from '../types'
 
 export type ConsoleChunkKind = 'out' | 'err' | 'system' | 'input'
@@ -41,6 +46,10 @@ export interface RunnerControls extends RunnerState {
     args: string[],
     /** Lines handed to Console.ReadLine() before the user is asked to type. */
     fixedInput: string[],
+    /** The filesystem to mount, so the program can open the student's files. */
+    files: MountedFile[],
+    /** Folder paths, so an empty folder still exists for the program. */
+    dirs: string[],
   ): void
   submitInput(line: string): void
   /** Answer the next Console.ReadLine() calls without the user typing again. */
@@ -55,9 +64,16 @@ function canUseSharedMemory(): boolean {
   return typeof SharedArrayBuffer !== 'undefined' && globalThis.crossOriginIsolated === true
 }
 
-export function useRunner(): RunnerControls {
+/**
+ * @param onFsChanges Called after a run with whatever the program wrote,
+ *   deleted or created. Held in a ref, so the caller does not have to memoise
+ *   it and a stale closure cannot swallow a change.
+ */
+export function useRunner(onFsChanges?: (changes: FsChanges) => void): RunnerControls {
   // Set only in ?runtime=main mode, where there is no worker at all.
-  const mainThreadRunnerRef = useRef<RunnerExports | null>(null)
+  const mainThreadRunnerRef = useRef<BootedRuntime | null>(null)
+  const onFsChangesRef = useRef(onFsChanges)
+  onFsChangesRef.current = onFsChanges
   // Worker mode answers input requests from here before prompting the user.
   const pendingInputRef = useRef<string[]>([])
   const preference = useMemo(resolveRuntimePreference, [])
@@ -132,6 +148,9 @@ export function useRunner(): RunnerControls {
         }
         break
       }
+      case 'fs-changes':
+        onFsChangesRef.current?.(message.changes)
+        break
       case 'exit':
         setRunning(false)
         setAwaitingInput(false)
@@ -157,12 +176,12 @@ export function useRunner(): RunnerControls {
     setFatal(null)
     setPhase('loading-runtime')
     void bootOnMainThread(new URL(RUNTIME_BASE_PATH, location.origin).href, { emit: handleEvent })
-      .then((exports) => {
-        mainThreadRunnerRef.current = exports
+      .then((booted) => {
+        mainThreadRunnerRef.current = booted
         readyRef.current = true
         setReady(true)
         setPhase('idle')
-        setStatusDetail(`${exports.ReferenceCount()} references`)
+        setStatusDetail(`${booted.runner.ReferenceCount()} references`)
       })
       .catch((error: unknown) => {
         const message = error instanceof Error ? error.message : String(error)
@@ -226,6 +245,8 @@ export function useRunner(): RunnerControls {
     sources: Array<{ path: string; text: string }>,
     args: string[],
     fixedInput: string[],
+    files: MountedFile[],
+    dirs: string[],
   ) => {
     if (!ready || running) return
     setDiagnostics([])
@@ -235,8 +256,9 @@ export function useRunner(): RunnerControls {
     setPendingInput(fixedInput)
 
     if (mainThreadMode) {
-      const exports = mainThreadRunnerRef.current
-      if (!exports) { setRunning(false); return }
+      const booted = mainThreadRunnerRef.current
+      if (!booted) { setRunning(false); return }
+      const exports = booted.runner
       // Yield first so the UI can paint "running…": everything below blocks the
       // UI thread until the student's program returns.
       setPhase('compiling')
@@ -259,10 +281,36 @@ export function useRunner(): RunnerControls {
           }
           if (!compiled.success) { setLastExitCode(1); return }
 
+          // Same mount/diff dance as the worker, just without a message
+          // boundary in the middle. See utils/memfsBridge.ts.
+          const fs = booted.fs
+          const reserved = booted.reservedRootNames
+          let before: MountSnapshot | null = null
+          if (fs) {
+            clearMount(fs, reserved)
+            const mounted = mountFiles(fs, files, dirs, reserved)
+            if (mounted.skipped.length > 0) {
+              append('system', `[not mounted, these names belong to the .NET runtime: ${mounted.skipped.join(', ')}]\n`)
+            }
+            if (mounted.truncated) {
+              append('system', '[the filesystem is too large to mount in full — some files are not visible to your program]\n')
+            }
+            before = walkMount(fs, reserved)
+          }
+
           setPhase('running')
-          const result = JSON.parse(exports.Run(JSON.stringify(args))) as { exitCode: number; error?: string | null }
-          if (result.error) append('err', result.error + '\n')
-          setLastExitCode(result.exitCode)
+          try {
+            const result = JSON.parse(exports.Run(JSON.stringify(args))) as { exitCode: number; error?: string | null }
+            if (result.error) append('err', result.error + '\n')
+            setLastExitCode(result.exitCode)
+          } finally {
+            // Even after a throw: a program that wrote its output and then
+            // failed should not lose the output too.
+            if (fs && before) {
+              const changes = diffMount(before, walkMount(fs, reserved))
+              if (!isEmptyChanges(changes)) onFsChangesRef.current?.(changes)
+            }
+          }
         } catch (error) {
           append('err', (error instanceof Error ? error.message : String(error)) + '\n')
         } finally {
@@ -273,8 +321,10 @@ export function useRunner(): RunnerControls {
       return
     }
 
-    const request: RunnerRequest = { type: 'run', language, sources, args }
-    if (!postToRuntime(request)) setRunning(false)
+    const request: RunnerRequest = { type: 'run', language, sources, args, files, dirs }
+    // The file buffers are transferred rather than copied; they come straight
+    // from IndexedDB, so nothing else holds a reference to detach.
+    if (!postToRuntime(request, files.map(file => file.content))) setRunning(false)
   }, [append, mainThreadMode, ready, running])
 
   const submitInput = useCallback((line: string) => {

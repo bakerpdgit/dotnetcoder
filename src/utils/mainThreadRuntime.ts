@@ -12,8 +12,7 @@
  * the UI thread, so it returns null immediately, and a student's infinite loop
  * freezes the tab until it is closed.
  */
-import { bootDotnetRuntime } from '../workers/bootRuntime'
-import type { RunnerExports } from '../workers/dotnetRuntime'
+import { bootDotnetRuntime, type BootedRuntime } from '../workers/bootRuntime'
 import type { RunnerEvent } from '../types'
 
 export interface MainThreadHost {
@@ -26,12 +25,12 @@ export interface MainThreadHost {
  * and React 18 StrictMode invokes effects twice in development, so an unguarded
  * boot is guaranteed to hit that in dev.
  */
-let bootPromise: Promise<RunnerExports> | null = null
+let bootPromise: Promise<BootedRuntime> | null = null
 
 export function bootOnMainThread(
   runtimeBaseUrl: string,
   host: MainThreadHost,
-): Promise<RunnerExports> {
+): Promise<BootedRuntime> {
   if (bootPromise) return bootPromise
   const verbose = isTracing()
   bootPromise = bootDotnetRuntime(runtimeBaseUrl, {
